@@ -95,3 +95,19 @@ Since the frontend and backend see the data differently, the `FSAConverter` util
 
 
 * **Alphabet Consistency**: The `alphabet` array is automatically derived from the unique labels present in the transitions during the sync process.
+
+## 6. Dev Notice:
+
+There is a temporary folder `/dev`, all the development stuff should be tested there
+
+run `yarn vite` or `yarn dev:fsa` to run
+
+also take notice in order for yarn to be configured correctly, there is a extra config
+
+```json
+root: 'dev', // for dev only
+```
+
+in the vite.config.ts
+
+remember to remove it when we get to production
