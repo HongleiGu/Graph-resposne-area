@@ -1,4 +1,6 @@
 // FSAResponseArea.tub.ts
+import z from 'zod';
+
 import { BaseResponseAreaProps, BaseResponseAreaWizardProps } from '../base-props.type';
 import { ResponseAreaTub } from '../response-area-tub';
 

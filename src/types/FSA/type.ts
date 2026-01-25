@@ -16,9 +16,9 @@ export const fsaAnswerSchema = z.object({
 export type FSA = z.infer<typeof fsaAnswerSchema>;
 
 export const defaultFSA: FSA = {
-  states: ['q0'],
+  states: [],
   alphabet: [],
   transitions: [],
-  initial_state: 'q0',
+  initial_state: '',
   accept_states: []
 };
