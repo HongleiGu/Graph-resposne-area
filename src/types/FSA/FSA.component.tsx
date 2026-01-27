@@ -1,92 +1,38 @@
-import { makeStyles } from '@styles';
-import cytoscape, { Core, NodeSingular, EdgeSingular } from 'cytoscape';
-import React, { useEffect, useRef, useState } from 'react';
+import { makeStyles } from '@styles'
+import cytoscape, { Core, NodeSingular, EdgeSingular } from 'cytoscape'
+import React, { useEffect, useRef, useState } from 'react'
 
-import { FSA } from './type';
+import ConfigPanel from './components/ConfigPanel'
+import ItemPropertiesPanel from './components/ItemPropertiesPanel'
+import { useLocalStyles } from './styles'
+import { DEFAULT_FSA_CONFIG, FSA, FSAConfig } from './type'
 
-/* -------------------- styles -------------------- */
-const useLocalStyles = makeStyles()((theme) => ({
-  container: {
-    width: '100%',
-    height: 600,
-    display: 'flex',
-    border: '1px solid #ddd',
-    fontFamily: 'sans-serif',
-  },
-  panel: {
-    width: 280,
-    borderRight: '1px solid #ddd',
-    padding: theme.spacing(2),
-    backgroundColor: '#fafafa',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: theme.spacing(2),
-  },
-  panelTitle: {
-    fontWeight: 600,
-    fontSize: 16,
-    borderBottom: '1px solid #eee',
-    paddingBottom: theme.spacing(1),
-  },
-  field: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: theme.spacing(0.5),
-  },
-  inputField: {
-    padding: '6px 8px',
-    border: '1px solid #ccc',
-    borderRadius: 4,
-  },
-  checkboxRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: theme.spacing(1),
-  },
-  addButton: {
-    padding: '6px 10px',
-    cursor: 'pointer',
-    backgroundColor: '#fff',
-    border: '1px solid #ccc',
-    borderRadius: 4,
-  },
-  deleteButton: {
-    padding: '6px',
-    backgroundColor: '#fff1f0',
-    color: '#cf1322',
-    border: '1px solid #ffa39e',
-    borderRadius: 4,
-    cursor: 'pointer',
-    fontWeight: 600,
-  },
-  cyWrapper: {
-    flexGrow: 1,
-  },
-}));
-
-/* -------------------- component -------------------- */
 interface FSAInputProps {
-  answer: FSA;
-  onChange: (val: FSA) => void;
+  answer: FSA
+  handleChange: (fsa: FSA) => void
 }
 
-export const FSAInput: React.FC<FSAInputProps> = ({ answer, onChange }) => {
-  const { classes } = useLocalStyles();
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const cyRef = useRef<Core | null>(null);
+export const FSAInput: React.FC<FSAInputProps> = ({
+  answer,
+  handleChange,
+}) => {
+  const { classes } = useLocalStyles()
 
-  // State for UI and logic
-  const [drawMode, setDrawMode] = useState(false);
-  const [fromNodeId, setFromNodeId] = useState<string | null>(null);
-  const [toNodeId, setToNodeId] = useState<string | null>(null);
-  const [selectedNode, setSelectedNode] = useState<NodeSingular | null>(null);
-  const [selectedEdge, setSelectedEdge] = useState<EdgeSingular | null>(null);
+  const cyRef = useRef<Core | null>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
 
-  /* -------------------- initialize cytoscape -------------------- */
+  const [selectedNode, setSelectedNode] = useState<NodeSingular | null>(null)
+  const [selectedEdge, setSelectedEdge] = useState<EdgeSingular | null>(null)
+  const [drawMode, setDrawMode] = useState<boolean>(false)
+  const [fromNode, setFromNode] = useState<string | null>(null)
+  const [config, setConfig] = useState<FSAConfig>(DEFAULT_FSA_CONFIG)
+  const [configOpen, setConfigOpen] = useState<boolean>(true)
+
+  /* -------------------- init cytoscape -------------------- */
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current) return
 
-    const cy = cytoscape({
+    const cy: Core = cytoscape({
       container: containerRef.current,
       layout: { name: 'preset' },
       style: [
@@ -111,243 +57,126 @@ export const FSAInput: React.FC<FSAInputProps> = ({ answer, onChange }) => {
             'target-arrow-shape': 'triangle',
             'line-color': '#555',
             'target-arrow-color': '#555',
-          },
-        },
-        {
-          selector: '.edge-source',
-          style: {
-            'border-color': '#1890ff',
-            'border-width': 3,
-          },
-        },
-        {
-          selector: '.edge-target',
-          style: {
-            'border-color': '#52c41a',
-            'border-width': 3,
+            'text-background-color': '#fff',
+            'text-background-opacity': 1,
+            'text-background-padding': '3px',
           },
         },
       ],
-    });
+    })
 
-    cyRef.current = cy;
+    cyRef.current = cy
+    return () => cy.destroy()
+  }, [])
 
-    return () => cy.destroy();
-  }, []);
-
-  /* -------------------- attach handlers -------------------- */
+  /* -------------------- node/edge handlers -------------------- */
   useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy) return;
+    const cy = cyRef.current
+    if (!cy) return
 
-    const handleNodeTap = (e: cytoscape.EventObject) => {
-      const node = e.target as NodeSingular;
-
+    const tapNode = (e: cytoscape.EventObject): void => {
+      const node = e.target as NodeSingular
       if (drawMode) {
-        if (!fromNodeId) {
-          setFromNodeId(node.id());
-          node.addClass('edge-source');
-        } else if (!toNodeId) {
-          setToNodeId(node.id());
-          node.addClass('edge-target');
+        if (!fromNode) {
+          setFromNode(node.id())
+          node.addClass('edge-source')
+        } else {
+          cy.add({
+            group: 'edges',
+            data: {
+              id: `e-${fromNode}-${node.id()}-${Date.now()}`,
+              source: fromNode,
+              target: node.id(),
+              label: config.epsilon_symbol,
+            },
+          })
+          cy.nodes().removeClass('edge-source')
+          setDrawMode(false)
+          setFromNode(null)
+          syncToBackend()
         }
-        return;
+        return
       }
 
-      setSelectedNode(node);
-      setSelectedEdge(null);
-    };
+      setSelectedNode(node)
+      setSelectedEdge(null)
+    }
 
-    const handleEdgeTap = (e: cytoscape.EventObject) => {
-      if (drawMode) return;
-      setSelectedEdge(e.target as EdgeSingular);
-      setSelectedNode(null);
-    };
+    const tapEdge = (e: cytoscape.EventObject): void => {
+      setSelectedEdge(e.target as EdgeSingular)
+      setSelectedNode(null)
+    }
 
-    cy.on('tap', 'node', handleNodeTap);
-    cy.on('tap', 'edge', handleEdgeTap);
+    cy.on('tap', 'node', tapNode)
+    cy.on('tap', 'edge', tapEdge)
 
     return () => {
-      cy.off('tap', 'node', handleNodeTap);
-      cy.off('tap', 'edge', handleEdgeTap);
-    };
-  }, [drawMode, fromNodeId, toNodeId]);
+      cy.off('tap', 'node', tapNode)
+      cy.off('tap', 'edge', tapEdge)
+    }
+  }, [drawMode, fromNode, config.epsilon_symbol])
 
-  /* -------------------- draw transition effect -------------------- */
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!drawMode || !fromNodeId || !toNodeId || !cy) return;
+  /* -------------------- sync to backend -------------------- */
+  const syncToBackend = (): void => {
+    const cy = cyRef.current
+    if (!cy) return
 
-    cy.add({
-      group: 'edges',
-      data: {
-        id: `e-${fromNodeId}-${toNodeId}-${Date.now()}`,
-        source: fromNodeId,
-        target: toNodeId,
-        label: 'a',
-      },
-    });
-
-    cy.nodes().removeClass('edge-source edge-target');
-
-    setDrawMode(false);
-    setFromNodeId(null);
-    setToNodeId(null);
-
-    syncToAnswer();
-  }, [drawMode, fromNodeId, toNodeId]);
-
-  /* -------------------- helpers -------------------- */
-  const syncToAnswer = () => {
-    const cy = cyRef.current;
-    if (!cy) return;
-
-    const states = cy.nodes().map((n) => n.id());
-    const transitions = cy
-      .edges()
-      .map((e) => `${e.source().id()}|${e.data('label') || 'ε'}|${e.target().id()}`);
-
-    onChange({
-      ...answer,
-      states,
-      transitions,
-      alphabet: Array.from(
-        new Set(transitions.map((t) => t.split('|')[1]).filter(s => s !== undefined)),
+    const fsa: FSA = {
+      states: cy.nodes().map((n) => n.id()),
+      transitions: cy.edges().map(
+        (e) =>
+          `${e.source().id()}|${e.data('label') || config.epsilon_symbol}|${e.target().id()}`,
       ),
-    });
-  };
+      initial_state: answer.initial_state,
+      accept_states: answer.accept_states,
+      alphabet: Array.from(new Set(cy.edges().map((e) => String(e.data('label'))))),
+    }
 
-  const addState = () => {
-    const cy = cyRef.current;
-    if (!cy) return;
+    handleChange(fsa) // Only FSA, not config
+  }
 
-    const id = `q${cy.nodes().length}`;
+  /* -------------------- add state -------------------- */
+  const addState = (): void => {
+    const cy = cyRef.current
+    if (!cy) return
+
+    const id = `q${cy.nodes().length}`
     cy.add({
       group: 'nodes',
-      data: { id, label: id, displayLabel: id },
+      data: { id, displayLabel: id },
       position: { x: 100 + Math.random() * 300, y: 100 + Math.random() * 300 },
-    });
+    })
 
-    syncToAnswer();
-  };
+    syncToBackend()
+  }
 
-  const deleteSelected = () => {
-    selectedNode?.remove();
-    selectedEdge?.remove();
-    setSelectedNode(null);
-    setSelectedEdge(null);
-    syncToAnswer();
-  };
-
-  /* -------------------- render -------------------- */
   return (
     <div className={classes.container}>
-      <div className={classes.panel}>
-        <div className={classes.panelTitle}>Controls</div>
-
-        <button className={classes.addButton} onClick={addState}>
-          + Add State
-        </button>
-
-        <button
-          className={classes.addButton}
-          onClick={() => {
-            const cy = cyRef.current;
-            cy?.nodes().removeClass('edge-source edge-target');
-            setDrawMode(!drawMode);
-            setFromNodeId(null);
-            setToNodeId(null);
-          }}
-        >
-          {drawMode ? 'Exit Draw Mode' : 'Draw Transition'}
-        </button>
-
-        {drawMode && (
-          <>
-            <div className={classes.panelTitle}>From Node: {fromNodeId}</div>
-            <div className={classes.panelTitle}>To Node: {toNodeId}</div>
-          </>
-        )}
-
-        <div className={classes.panelTitle}>Item Properties</div>
-
-        {/* Node Properties */}
-        {selectedNode && (
-          <>
-            <div className={classes.field}>
-              <label>Display Name</label>
-              <input
-                className={classes.inputField}
-                value={selectedNode.data('displayLabel')}
-                onChange={(e) => {
-                  selectedNode.data('displayLabel', e.target.value);
-                }}
-              />
-            </div>
-
-            <div className={classes.checkboxRow}>
-              <input
-                type="checkbox"
-                checked={answer.initial_state === selectedNode.id()}
-                onChange={(e) =>
-                  onChange({
-                    ...answer,
-                    initial_state: e.target.checked ? selectedNode.id() : '',
-                  })
-                }
-              />
-              <label>Initial State</label>
-            </div>
-
-            <div className={classes.checkboxRow}>
-              <input
-                type="checkbox"
-                checked={answer.accept_states.includes(selectedNode.id())}
-                onChange={(e) =>
-                  onChange({
-                    ...answer,
-                    accept_states: e.target.checked
-                      ? [...answer.accept_states, selectedNode.id()]
-                      : answer.accept_states.filter((s) => s !== selectedNode.id()),
-                  })
-                }
-              />
-              <label>Accepting State</label>
-            </div>
-
-            <button className={classes.deleteButton} onClick={deleteSelected}>
-              Delete State
-            </button>
-          </>
-        )}
-
-        {/* Edge Properties */}
-        {selectedEdge && (
-          <>
-            <div className={classes.field}>
-              <label>Transition Symbol</label>
-              <input
-                className={classes.inputField}
-                value={String(selectedEdge.data('label') || '')}
-                onChange={(e) => {
-                  selectedEdge.data('label', e.target.value);
-                  syncToAnswer();
-                }}
-              />
-            </div>
-
-            <button className={classes.deleteButton} onClick={deleteSelected}>
-              Delete Transition
-            </button>
-          </>
-        )}
-
-        {!selectedNode && !selectedEdge && (
-          <div style={{ color: '#999' }}>Select an element to edit</div>
-        )}
-      </div>
+      <ItemPropertiesPanel
+        cyRef={cyRef}
+        classes={classes}
+        addState={addState}
+        drawMode={drawMode}
+        setDrawMode={setDrawMode}
+        setFromNode={setFromNode}
+        selectedNode={selectedNode}
+        setSelectedNode={setSelectedNode}
+        selectedEdge={selectedEdge}
+        setSelectedEdge={setSelectedEdge}
+        syncToBackend={syncToBackend}
+        handleChange={handleChange}
+        answer={answer}
+      />
 
       <div ref={containerRef} className={classes.cyWrapper} />
+
+      <ConfigPanel
+        config={config}
+        setConfig={setConfig}
+        configOpen={configOpen}
+        setConfigOpen={setConfigOpen}
+        classes={classes}
+      />
     </div>
-  );
-};
+  )
+}
