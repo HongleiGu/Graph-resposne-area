@@ -59,3 +59,140 @@ export const DEFAULT_FSA_CONFIG: FSAConfig =  {
   is_dev: false,
   epsilon_symbol: "epsilon"
 }
+
+/* ===========================
+   Error codes
+=========================== */
+
+export const ErrorCodeSchema = z.enum([
+  "INVALID_STATE",
+  "INVALID_INITIAL",
+  "INVALID_ACCEPT",
+  "INVALID_SYMBOL",
+
+  "INVALID_TRANSITION_SOURCE",
+  "INVALID_TRANSITION_DEST",
+  "INVALID_TRANSITION_SYMBOL",
+  "MISSING_TRANSITION",
+  "DUPLICATE_TRANSITION",
+
+  "UNREACHABLE_STATE",
+  "DEAD_STATE",
+
+  "WRONG_AUTOMATON_TYPE",
+  "NOT_DETERMINISTIC",
+  "NOT_COMPLETE",
+  "NOT_MINIMAL",
+
+  "LANGUAGE_MISMATCH",
+  "TEST_CASE_FAILED",
+
+  "EMPTY_STATES",
+  "EMPTY_ALPHABET",
+  "EVALUATION_ERROR",
+]);
+
+/* ===========================
+   Element highlighting
+=========================== */
+
+export const ElementHighlightTypeSchema = z.enum([
+  "state",
+  "transition",
+  "initial_state",
+  "accept_state",
+  "alphabet_symbol",
+]);
+export const ElementHighlightSchema = z.object({
+  type: ElementHighlightTypeSchema,
+  state_id: z.string().nullable().optional(),
+  from_state: z.string().nullable().optional(),
+  to_state: z.string().nullable().optional(),
+  symbol: z.string().nullable().optional(),
+});
+
+
+/* ===========================
+   Validation errors
+=========================== */
+
+export const ValidationSeveritySchema = z.enum([
+  "error",
+  "warning",
+  "info",
+]);
+
+export const ValidationErrorSchema = z.object({
+  message: z.string(),
+  code: ErrorCodeSchema,
+  severity: ValidationSeveritySchema.default("error"),
+  highlight: ElementHighlightSchema.nullable().optional(),
+  suggestion: z.string().optional(),
+});
+
+/* ===========================
+   Test results
+=========================== */
+
+export const TestResultSchema = z.object({
+  input: z.string(),
+  expected: z.boolean(),
+  actual: z.boolean(),
+  passed: z.boolean(),
+  trace: z.array(z.string()).optional(),
+});
+
+/* ===========================
+   Structural analysis
+=========================== */
+
+export const StructuralInfoSchema = z.object({
+  is_deterministic: z.boolean(),
+  is_complete: z.boolean(),
+
+  num_states: z.number().int().min(0),
+  num_transitions: z.number().int().min(0),
+
+  unreachable_states: z.array(z.string()).default([]),
+  dead_states: z.array(z.string()).default([]),
+});
+
+/* ===========================
+   Language comparison
+=========================== */
+
+export const CounterexampleTypeSchema = z.enum([
+  "should_accept",
+  "should_reject",
+]);
+
+export const LanguageComparisonSchema = z.object({
+  are_equivalent: z.boolean(),
+  counterexample: z.string().nullable().optional(),
+  counterexample_type: CounterexampleTypeSchema.nullable().optional(),
+});
+
+/* ===========================
+   Top-level feedback
+=========================== */
+
+export const FSAFeedbackSchema = z.object({
+  summary: z.string().default(""),
+
+  errors: z.array(ValidationErrorSchema).default([]),
+  warnings: z.array(ValidationErrorSchema).default([]),
+
+  structural: StructuralInfoSchema.optional(),
+  language: LanguageComparisonSchema.optional(),
+
+  test_results: z.array(TestResultSchema).default([]),
+  hints: z.array(z.string()).default([]),
+});
+
+export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
+export type ElementHighlight = z.infer<typeof ElementHighlightSchema>;
+export type ValidationError = z.infer<typeof ValidationErrorSchema>;
+export type TestResult = z.infer<typeof TestResultSchema>;
+export type StructuralInfo = z.infer<typeof StructuralInfoSchema>;
+export type LanguageComparison = z.infer<typeof LanguageComparisonSchema>;
+export type FSAFeedback = z.infer<typeof FSAFeedbackSchema>;

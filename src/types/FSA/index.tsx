@@ -1,4 +1,6 @@
-import { z } from 'zod'
+// import React, { useMemo } from 'react'
+// import { z } from 'zod'
+
 
 import {
   BaseResponseAreaProps,
@@ -7,7 +9,7 @@ import {
 import { ResponseAreaTub } from '../response-area-tub'
 
 import { FSAInput } from './FSA.component'
-import { fsaAnswerSchema, FSA, defaultFSA, DEFAULT_FSA_CONFIG, FSAConfig } from './type'
+import { fsaAnswerSchema, FSA, defaultFSA, DEFAULT_FSA_CONFIG, FSAConfig, FSAFeedback } from './type'
 
 export class FSAResponseAreaTub extends ResponseAreaTub {
   public readonly responseType = 'FSA'
@@ -16,7 +18,10 @@ export class FSAResponseAreaTub extends ResponseAreaTub {
   protected answerSchema = fsaAnswerSchema
   protected answer: FSA = defaultFSA // Never undefined now
   protected config: FSAConfig = DEFAULT_FSA_CONFIG
-  private debug = ''
+  // private feedback: FSAFeedback | null = null
+
+  public readonly delegateFeedback = false // we want to manage our own feedback
+  public readonly delegateLivePreview = false // we want live previews
 
   initWithConfig = (config: any) => { 
       this.config = {
@@ -28,25 +33,46 @@ export class FSAResponseAreaTub extends ResponseAreaTub {
   customCheck = () => {} // will set this up later
 
   /* -------------------- Input -------------------- */
-  public InputComponent = (props: BaseResponseAreaProps): JSX.Element => {
-    // Always ensure a valid FSA is passed
-    const parsedAnswer = this.answerSchema.safeParse(props.answer)
-    const validAnswer: FSA = parsedAnswer.success ? parsedAnswer.data : defaultFSA
 
-    return (
-      <>
-      <p>{this.debug}</p>
+public InputComponent = (props: BaseResponseAreaProps): JSX.Element => {
+  // Ensure a valid FSA answer
+  const validAnswer: FSA = this.answerSchema.safeParse(props.answer).success
+    ? this.answerSchema.safeParse(props.answer).data ?? defaultFSA
+    : defaultFSA
+
+  // // Parse feedback safely and memoize so it updates when props.feedback changes
+  // const feedback: FSAFeedback | null = useMemo(() => {
+  //   if (!props.feedback?.feedback) return null
+  //   try {
+  //     return JSON.parse(props.feedback.feedback)
+  //   } catch {
+  //     return null
+  //   }
+  // }, [props.feedback?.feedback])
+
+  return (
+    <>
+      <p>feedback: {props.feedback?.feedback}</p>
       <FSAInput
         {...props}
+        feedback={(() => {
+          const raw = props.feedback?.feedback
+          if (!raw) return {}
+          try {
+            // split by <br> and take the second part, trim whitespace
+            const jsonPart = raw.split('<br>')[1]?.trim() ?? '{}'
+            return JSON.parse(jsonPart)
+          } catch {
+            return {} // fallback to empty object if parsing fails
+          }
+        })()}
         answer={validAnswer}
-        handleChange={(val: FSA): void => {
-          this.debug=JSON.stringify(val)
-          props.handleChange(val)
-        }}
+        handleChange={(val: FSA) => props.handleChange(val)}
       />
-      </>
-    )
-  }
+    </>
+  )
+}
+
 
   /* -------------------- Wizard -------------------- */
   public WizardComponent = (
@@ -57,6 +83,7 @@ export class FSAResponseAreaTub extends ResponseAreaTub {
         <p>answer: {JSON.stringify(this.answer)}    config: {JSON.stringify(this.config)}</p>
         <FSAInput
           {...props}
+          feedback={null} // the wizard should not have feedback
           answer={this.answer} // Guaranteed defined
           handleChange={(val: FSA): void => {
             this.answer = val

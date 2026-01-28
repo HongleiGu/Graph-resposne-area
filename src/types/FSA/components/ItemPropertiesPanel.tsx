@@ -1,7 +1,9 @@
 import type { Core, NodeSingular, EdgeSingular } from 'cytoscape'
 import React from 'react'
 
-import { FSA } from '../type'
+import { FSA, FSAFeedback } from '../type'
+
+import { FSAFeedbackPanel } from './FSAFeedbackPanel'
 
 interface ItemPropertiesPanelProps {
   cyRef: React.MutableRefObject<Core | null>
@@ -23,6 +25,7 @@ interface ItemPropertiesPanelProps {
   handleChange: (fsa: FSA) => void
 
   syncToBackend: () => void
+  feedback: FSAFeedback | null
 }
 
 export default function ItemPropertiesPanel({
@@ -39,6 +42,7 @@ export default function ItemPropertiesPanel({
   answer,
   handleChange,
   syncToBackend,
+  feedback
 }: ItemPropertiesPanelProps): JSX.Element {
   return (
     <div className={classes.panel}>
@@ -154,6 +158,9 @@ export default function ItemPropertiesPanel({
           Delete Selected
         </button>
       )}
+      <FSAFeedbackPanel
+        feedback={feedback}
+      />
     </div>
   )
 }

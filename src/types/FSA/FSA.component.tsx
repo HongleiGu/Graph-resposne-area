@@ -5,16 +5,18 @@ import React, { useEffect, useRef, useState } from 'react'
 import ConfigPanel from './components/ConfigPanel'
 import ItemPropertiesPanel from './components/ItemPropertiesPanel'
 import { useLocalStyles } from './styles'
-import { DEFAULT_FSA_CONFIG, FSA, FSAConfig } from './type'
+import { DEFAULT_FSA_CONFIG, FSA, FSAConfig, FSAFeedback } from './type'
 
 interface FSAInputProps {
   answer: FSA
   handleChange: (fsa: FSA) => void
+  feedback: FSAFeedback | null
 }
 
 export const FSAInput: React.FC<FSAInputProps> = ({
   answer,
   handleChange,
+  feedback
 }) => {
   const { classes } = useLocalStyles()
 
@@ -166,6 +168,7 @@ export const FSAInput: React.FC<FSAInputProps> = ({
         syncToBackend={syncToBackend}
         handleChange={handleChange}
         answer={answer}
+        feedback={feedback}
       />
 
       <div ref={containerRef} className={classes.cyWrapper} />
