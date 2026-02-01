@@ -5,18 +5,22 @@ import React, { useEffect, useRef, useState } from 'react'
 import ConfigPanel from './components/ConfigPanel'
 import ItemPropertiesPanel from './components/ItemPropertiesPanel'
 import { useLocalStyles } from './styles'
-import { DEFAULT_FSA_CONFIG, FSA, FSAConfig, FSAFeedback } from './type'
+import { CheckPhase, DEFAULT_FSA_CONFIG, FSA, FSAConfig, FSAFeedback } from './type'
 
 interface FSAInputProps {
   answer: FSA
   handleChange: (fsa: FSA) => void
   feedback: FSAFeedback | null
+  previewFeedback: FSAFeedback | null
+  phase: CheckPhase
 }
 
 export const FSAInput: React.FC<FSAInputProps> = ({
   answer,
   handleChange,
   feedback,
+  previewFeedback,
+  phase
 }) => {
   const { classes } = useLocalStyles()
 
@@ -173,6 +177,7 @@ export const FSAInput: React.FC<FSAInputProps> = ({
       alphabet: Array.from(
         new Set(cy.edges().map((e) => String(e.data('label')))),
       ),
+      config: JSON.stringify(config)
     }
 
     handleChange(fsa)
@@ -286,13 +291,23 @@ export const FSAInput: React.FC<FSAInputProps> = ({
         handleChange={handleChange}
         answer={answer}
         feedback={feedback}
+        previewFeedback={previewFeedback}
+        phase={phase}
       />
 
       <div ref={containerRef} className={classes.cyWrapper} />
 
       <ConfigPanel
         config={config}
-        setConfig={setConfig}
+        setConfig={(val: FSAConfig) => {
+          const fsa: FSA = {
+            ...answer,
+            config: JSON.stringify(val)
+          }
+
+          handleChange(fsa)
+          setConfig(val)
+        }}
         configOpen={configOpen}
         setConfigOpen={setConfigOpen}
         classes={classes}
