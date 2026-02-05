@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 import { CodeResponseAreaTub } from './Code'
 import { EssayResponseAreaTub } from './Essay'
-import { FSAResponseAreaTub } from './FSA'
+import { GraphResponseAreaTub } from './Graph'
 import { MatrixResponseAreaTub } from './Matrix'
 import { MultipleChoiceResponseAreaTub } from './MultipleChoice'
 import { NumberResponseAreaTub } from './NumberInput'
@@ -100,8 +100,8 @@ const createReponseAreaTub = (type: string): ResponseAreaTub => {
       return new EssayResponseAreaTub()
     case 'CODE':
       return new CodeResponseAreaTub()
-    case 'FSA':
-      return new FSAResponseAreaTub()
+    case 'HANDDRAWNGRAPH':
+      return new GraphResponseAreaTub()
     case 'VOID':
       return new VoidResponseAreaTub()
     default:

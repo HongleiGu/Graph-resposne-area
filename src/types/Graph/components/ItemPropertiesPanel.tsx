@@ -1,15 +1,13 @@
 import type { Core, NodeSingular, EdgeSingular } from 'cytoscape'
 import React from 'react'
 
-import { CheckPhase, FSA, FSAFeedback } from '../type'
-
-import { FSAFeedbackPanel } from './FSAFeedbackPanel'
+import { Graph } from '../type'
 
 interface ItemPropertiesPanelProps {
   cyRef: React.MutableRefObject<Core | null>
   classes: Record<string, string>
 
-  addState: () => void
+  addNode: () => void
 
   drawMode: boolean
   setDrawMode: React.Dispatch<React.SetStateAction<boolean>>
@@ -21,19 +19,16 @@ interface ItemPropertiesPanelProps {
   selectedEdge: EdgeSingular | null
   setSelectedEdge: (e: EdgeSingular | null) => void
 
-  answer: FSA
-  handleChange: (fsa: FSA) => void
+  graph: Graph
+  handleChange: (graph: Graph) => void
 
   syncToBackend: () => void
-  feedback: FSAFeedback | null
-  previewFeedback: FSAFeedback | null
-  phase: CheckPhase
 }
 
 export default function ItemPropertiesPanel({
   cyRef,
   classes,
-  addState,
+  addNode,
   drawMode,
   setDrawMode,
   setFromNode,
@@ -41,20 +36,17 @@ export default function ItemPropertiesPanel({
   setSelectedNode,
   selectedEdge,
   setSelectedEdge,
-  answer,
+  graph,
   handleChange,
   syncToBackend,
-  feedback,
-  previewFeedback,
-  phase
 }: ItemPropertiesPanelProps): JSX.Element {
   return (
     <div className={classes.panel}>
       <div className={classes.panelTitle}>Item Properties</div>
 
       {/* -------------------- Actions -------------------- */}
-      <button className={classes.addButton} onClick={addState}>
-        + Add State
+      <button className={classes.addButton} onClick={addNode}>
+        + Add Node
       </button>
 
       <button
@@ -76,66 +68,28 @@ export default function ItemPropertiesPanel({
           cyRef.current?.nodes().removeClass('edge-source edge-target')
         }}
       >
-        {drawMode ? 'Cancel Draw' : 'Draw Transition'}
+        {drawMode ? 'Cancel Draw' : 'Draw Edge'}
       </button>
 
       {/* -------------------- Node Properties -------------------- */}
       {selectedNode && (
-        <>
-          <div className={classes.field}>
-            <label>Display Name</label>
-            <input
-              className={classes.inputField}
-              value={selectedNode.data('displayLabel') ?? ''}
-              onChange={(e) => {
-                selectedNode.data('displayLabel', e.target.value)
-                // syncToBackend()
-              }}
-            />
-          </div>
-
-          {/* Initial State (unique) */}
-          <div className={classes.checkboxRow}>
-            <input
-              type="checkbox"
-              checked={answer.initial_state === selectedNode.id()}
-              onChange={(e) => {
-                handleChange({
-                  ...answer,
-                  initial_state: e.target.checked ? selectedNode.id() : answer.initial_state,
-                })
-                // syncToBackend()
-              }}
-            />
-            <label>Initial State</label>
-          </div>
-
-          {/* Accepting State (multiple allowed) */}
-          <div className={classes.checkboxRow}>
-            <input
-              type="checkbox"
-              checked={answer.accept_states.includes(selectedNode.id())}
-              onChange={(e) => {
-                handleChange({
-                  ...answer,
-                  accept_states: e.target.checked
-                    ? [...answer.accept_states, selectedNode.id()]
-                    : answer.accept_states.filter(
-                        (id) => id !== selectedNode.id(),
-                      ),
-                })
-                // syncToBackend()
-              }}
-            />
-            <label>Accepting State</label>
-          </div>
-        </>
+        <div className={classes.field}>
+          <label>Display Name</label>
+          <input
+            className={classes.inputField}
+            value={selectedNode.data('displayLabel') ?? ''}
+            onChange={(e) => {
+              selectedNode.data('displayLabel', e.target.value)
+              syncToBackend()
+            }}
+          />
+        </div>
       )}
 
       {/* -------------------- Edge Properties -------------------- */}
       {selectedEdge && (
         <div className={classes.field}>
-          <label>Transition Symbol</label>
+          <label>Edge Label</label>
           <input
             className={classes.inputField}
             value={selectedEdge.data('label') ?? ''}
@@ -162,11 +116,6 @@ export default function ItemPropertiesPanel({
           Delete Selected
         </button>
       )}
-      <FSAFeedbackPanel
-        feedback={feedback}
-        // previewFeedback={previewFeedback}
-        phase={phase}
-      />
     </div>
   )
 }
