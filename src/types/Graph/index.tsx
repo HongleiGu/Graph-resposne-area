@@ -5,8 +5,9 @@ import {
 import { ResponseAreaTub } from '../response-area-tub'
 
 import { GraphEditor } from './Graph.component'
-import { Graph, CompressedGraph, CompressedGraphSchema } from './type'
+import { Graph, CompressedGraph, CompressedGraphSchema, GraphFeedback, CheckPhase } from './type'
 import { Edge, Node } from './type'
+import { validateGraph } from './validateGraph'
 
 export class GraphResponseAreaTub extends ResponseAreaTub {
   public readonly responseType = 'HANDDRAWNGRAPH'
@@ -24,7 +25,8 @@ export class GraphResponseAreaTub extends ResponseAreaTub {
     metadata: {},
   }
 
-  private previewFeedback: any = null
+  private previewFeedback: GraphFeedback | null = null
+  private phase: CheckPhase = CheckPhase.Idle
 
   public readonly delegateFeedback = false
   public readonly delegateLivePreview = true
@@ -33,17 +35,39 @@ export class GraphResponseAreaTub extends ResponseAreaTub {
 
   /* -------------------- Custom Check -------------------- */
   customCheck(): void {
+    // Block submission if preview validation fails
     if (this.previewFeedback) {
       throw new Error('preview failed')
     }
+
+    // Preview passed — ensure it's cleared
     this.previewFeedback = null
   }
 
   /* -------------------- Input -------------------- */
   InputComponent = (props: BaseResponseAreaProps) => {
+    // Ensure a valid compressed graph answer
     const parsed = this.answerSchema.safeParse(props.answer)
     const compressedAnswer = parsed.success ? parsed.data : this.answer
 
+    /* ---------- Extract submitted feedback ---------- */
+    const submittedFeedback: GraphFeedback | null = (() => {
+      const raw = props.feedback?.feedback
+      if (!raw) return null
+
+      try {
+        const jsonPart = raw.split('<br>')[1]?.trim()
+        if (!jsonPart) return null
+        return JSON.parse(jsonPart)
+      } catch {
+        return null
+      }
+    })()
+
+    /* ---------- Effective feedback ---------- */
+    const effectiveFeedback = this.previewFeedback ?? submittedFeedback
+
+    // Decompress to Graph format for editor
     const graph: Graph = {
       nodes: compressedAnswer.nodes.map((e) => JSON.parse(e)),
       edges: compressedAnswer.edges.map((e) => JSON.parse(e)),
@@ -57,6 +81,8 @@ export class GraphResponseAreaTub extends ResponseAreaTub {
     return (
       <GraphEditor
         graph={graph}
+        feedback={effectiveFeedback}
+        phase={this.phase}
         onChange={(val: Graph) => {
           const compressed: CompressedGraph = {
             ...compressedAnswer,
@@ -69,8 +95,19 @@ export class GraphResponseAreaTub extends ResponseAreaTub {
             metadata: val.metadata,
           }
 
-          // 🔑 Keep instance state valid
+          // Keep instance state valid
           this.answer = compressed
+
+          // Validate the graph
+          const preview = validateGraph(val)
+
+          if (preview.errors.filter((e) => e.type === 'error').length > 0) {
+            this.previewFeedback = preview
+            this.phase = CheckPhase.PreviewError
+          } else {
+            this.previewFeedback = null
+            this.phase = CheckPhase.Idle
+          }
 
           props.handleChange(compressed)
         }}
@@ -93,6 +130,8 @@ export class GraphResponseAreaTub extends ResponseAreaTub {
     return (
       <GraphEditor
         graph={graph}
+        feedback={null}
+        phase={CheckPhase.Evaluated}
         onChange={(val: Graph) => {
           const compressed: CompressedGraph = {
             ...this.answer,
@@ -105,10 +144,10 @@ export class GraphResponseAreaTub extends ResponseAreaTub {
             metadata: val.metadata,
           }
 
-          // 🔑 Wizard MUST update instance state first
+          // Wizard must update instance state first
           this.answer = compressed
 
-          // 🔑 Wizard MUST emit full payload
+          // Wizard must emit full payload
           props.handleChange({
             responseType: this.responseType,
             answer: compressed,

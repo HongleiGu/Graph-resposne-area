@@ -73,3 +73,36 @@ export function compressGraph(graph: z.infer<typeof GraphSchema>) {
     edges: JSON.stringify(graph.edges),
   };
 }
+
+// -----------------------------
+// Validation & Feedback Types
+// -----------------------------
+export enum CheckPhase {
+  Idle = 'idle',
+  PreviewError = 'preview_error',
+  Evaluated = 'evaluated',
+}
+
+export interface ValidationError {
+  type: 'error' | 'warning'
+  message: string
+  field?: string
+}
+
+export interface GraphFeedback {
+  valid: boolean
+  errors: ValidationError[]
+  phase: CheckPhase
+}
+
+export const GraphFeedbackSchema = z.object({
+  valid: z.boolean(),
+  errors: z.array(
+    z.object({
+      type: z.enum(['error', 'warning']),
+      message: z.string(),
+      field: z.string().optional(),
+    })
+  ),
+  phase: z.nativeEnum(CheckPhase),
+})

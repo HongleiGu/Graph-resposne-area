@@ -52,7 +52,8 @@ if (typeof window !== 'undefined') {
 }
 
 class VoidResponseAreaTub extends ResponseAreaTub {
-  public readonly responseType = 'VOID'
+  // public readonly responseType = 'VOID'
+  public readonly responseType = 'SANDBOX'
 
   protected answerSchema = z.any()
 
