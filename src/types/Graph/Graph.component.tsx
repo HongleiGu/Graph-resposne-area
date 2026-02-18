@@ -94,8 +94,8 @@ export const GraphEditor: React.FC<GraphEditorProps> = ({
   const drawCanvasRef = useRef<HTMLCanvasElement | null>(null)
 
   const [drawMode, setDrawMode] = useState<boolean>(false)
-  const [selectedNode, setSelectedNode] = useState<NodeSingular | null>(null)
-  const [selectedEdge, setSelectedEdge] = useState<EdgeSingular | null>(null)
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [fromNode, setFromNode] = useState<string | null>(null)
   const [nodeCounter, setNodeCounter] = useState<number>(graph.nodes.length)
   const [isDrawing, setIsDrawing] = useState<boolean>(false)
@@ -103,11 +103,11 @@ export const GraphEditor: React.FC<GraphEditorProps> = ({
   // Drawing state
   const pathRef = useRef<paper.Path | null>(null)
   const startPointRef = useRef<paper.Point | null>(null)
-  const paperInitializedRef = useRef<boolean>(false)
+  const paperProjectRef = useRef<paper.Project | null>(null)
 
-  /* -------------------- Initialize Cytoscape -------------------- */
+  /* -------------------- Initialize Cytoscape (once) -------------------- */
   useEffect(() => {
-    if (!containerRef.current) return
+    if (!containerRef.current || cyRef.current) return
     
     const cy: Core = cytoscape({
       container: containerRef.current,
@@ -128,6 +128,14 @@ export const GraphEditor: React.FC<GraphEditorProps> = ({
           } 
         },
         { 
+          selector: 'node:selected', 
+          style: { 
+            'background-color': '#e3f2fd',
+            'border-width': 3,
+            'border-color': '#1976d2'
+          } 
+        },
+        { 
           selector: 'edge', 
           style: { 
             label: 'data(label)', 
@@ -136,6 +144,14 @@ export const GraphEditor: React.FC<GraphEditorProps> = ({
             'line-color': '#555', 
             'target-arrow-color': '#555',
             'font-size': '12px'
+          } 
+        },
+        { 
+          selector: 'edge:selected', 
+          style: { 
+            'line-color': '#1976d2',
+            'target-arrow-color': '#1976d2',
+            'width': 3
           } 
         },
         {
@@ -149,32 +165,78 @@ export const GraphEditor: React.FC<GraphEditorProps> = ({
     })
 
     cyRef.current = cy
-
-    // Load initial nodes
-    graph.nodes.forEach((n: Node) =>
-      cy.add({ 
-        group: 'nodes', 
-        data: { id: n.id, displayLabel: n.label ?? n.id }, 
-        position: { x: n.x ?? 100, y: n.y ?? 100 } 
-      }),
-    )
-
-    // Load initial edges
-    graph.edges.forEach((e: Edge) =>
-      cy.add({ 
-        group: 'edges', 
-        data: { 
-          id: e.id ?? `e-${e.source}-${e.target}`, 
-          source: e.source, 
-          target: e.target, 
-          label: e.label ?? '' 
-        } 
-      }),
-    )
+    console.log('Cytoscape initialized')
 
     return () => {
       cy.destroy()
+      cyRef.current = null
     }
+  }, [])
+
+  /* -------------------- Update Cytoscape from Graph -------------------- */
+  useEffect(() => {
+    const cy = cyRef.current
+    if (!cy) return
+
+    console.log('Updating cytoscape from graph', graph)
+
+    // Get existing elements
+    const existingNodeIds = new Set(cy.nodes().map(n => n.id()))
+    const existingEdgeIds = new Set(cy.edges().map(e => e.id()))
+
+    // Add/Update nodes
+    graph.nodes.forEach((n: Node) => {
+      if (existingNodeIds.has(n.id)) {
+        // Update existing node
+        const node = cy.getElementById(n.id)
+        node.data('displayLabel', n.label ?? n.id)
+        node.position({ x: n.x ?? node.position().x, y: n.y ?? node.position().y })
+      } else {
+        // Add new node
+        cy.add({ 
+          group: 'nodes', 
+          data: { id: n.id, displayLabel: n.label ?? n.id }, 
+          position: { x: n.x ?? 100, y: n.y ?? 100 } 
+        })
+      }
+    })
+
+    // Remove nodes not in graph
+    const graphNodeIds = new Set(graph.nodes.map(n => n.id))
+    cy.nodes().forEach(node => {
+      if (!graphNodeIds.has(node.id())) {
+        node.remove()
+      }
+    })
+
+    // Add/Update edges
+    graph.edges.forEach((e: Edge) => {
+      const edgeId = e.id ?? `e-${e.source}-${e.target}`
+      if (existingEdgeIds.has(edgeId)) {
+        // Update existing edge
+        const edge = cy.getElementById(edgeId)
+        edge.data('label', e.label ?? '')
+      } else {
+        // Add new edge
+        cy.add({ 
+          group: 'edges', 
+          data: { 
+            id: edgeId, 
+            source: e.source, 
+            target: e.target, 
+            label: e.label ?? '' 
+          } 
+        })
+      }
+    })
+
+    // Remove edges not in graph
+    const graphEdgeIds = new Set(graph.edges.map(e => e.id ?? `e-${e.source}-${e.target}`))
+    cy.edges().forEach(edge => {
+      if (!graphEdgeIds.has(edge.id())) {
+        edge.remove()
+      }
+    })
   }, [graph])
 
   /* -------------------- Sync to Graph -------------------- */
@@ -237,13 +299,12 @@ export const GraphEditor: React.FC<GraphEditorProps> = ({
   /* -------------------- Paper.js Setup -------------------- */
   useEffect(() => {
     const canvas = drawCanvasRef.current
-    if (!canvas) return
+    if (!canvas || paperProjectRef.current) return
 
-    // Initialize Paper.js only once
-    if (!paperInitializedRef.current) {
-      paper.setup(canvas)
-      paperInitializedRef.current = true
-    }
+    // Create a new Paper.js project for this instance
+    const paperProject = new paper.Project(canvas)
+    paperProjectRef.current = paperProject
+    console.log('Paper.js project created')
 
     // Setup canvas size
     const updateCanvasSize = () => {
@@ -257,8 +318,10 @@ export const GraphEditor: React.FC<GraphEditorProps> = ({
       canvas.height = height
       
       // Update Paper.js view
-      paper.view.viewSize = new paper.Size(width, height)
-      paper.view.update()
+      if (paperProjectRef.current) {
+        paperProjectRef.current.view.viewSize = new paper.Size(width, height)
+        paperProjectRef.current.view.update()
+      }
     }
 
     updateCanvasSize()
@@ -271,12 +334,19 @@ export const GraphEditor: React.FC<GraphEditorProps> = ({
 
     return () => {
       resizeObserver.disconnect()
+      if (paperProjectRef.current) {
+        paperProjectRef.current.remove()
+        paperProjectRef.current = null
+      }
     }
   }, [])
 
   /* -------------------- Drawing Handlers -------------------- */
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!drawMode) return
+    if (!drawMode || !paperProjectRef.current) return
+    
+    // Activate this project before drawing
+    paperProjectRef.current.activate()
     
     e.preventDefault()
     e.stopPropagation()
@@ -375,27 +445,36 @@ export const GraphEditor: React.FC<GraphEditorProps> = ({
           let closestNode: NodeSingular | null = null
 
           cy.nodes().forEach((node) => {
-            const pos = node.position()
+            // Use rendered position (viewport coordinates) instead of graph position
+            const pos = node.renderedPosition()
             const dist = Math.hypot(pos.x - pointX, pos.y - pointY)
+            console.log(`  Node ${node.id()}: rendered pos (${pos.x}, ${pos.y}), dist: ${dist}`)
             if (dist < minDist) {
               minDist = dist
               closestNode = node
             }
           })
 
+          console.log(`  Closest node at distance ${minDist}, threshold: 75`)
           return minDist < 75 ? closestNode : null // Increased threshold to 75
         }
+        
+        console.log('Start point:', startPointRef.current.x, startPointRef.current.y)
+        console.log('End point:', endPoint.x, endPoint.y)
         
         const startNode = findClosestNode(startPointRef.current.x, startPointRef.current.y)
         const endNode   = findClosestNode(endPoint.x, endPoint.y)
 
         console.log('Found nodes:', {
           startNode: startNode?.id(),
-          endNode: endNode?.id()
+          startDist: startNode ? Math.hypot(startNode.position().x - startPointRef.current.x, startNode.position().y - startPointRef.current.y) : 'N/A',
+          endNode: endNode?.id(),
+          endDist: endNode ? Math.hypot(endNode.position().x - endPoint.x, endNode.position().y - endPoint.y) : 'N/A',
+          totalNodes: cy.nodes().length
         })
 
         if (startNode !== null && endNode !== null && startNode.id() !== endNode.id()) {
-          console.log('Adding edge between:', startNode.id(), endNode.id())
+          console.log('✓ Adding edge between:', startNode.id(), endNode.id())
           cy.add({
             group: 'edges',
             data: {
@@ -406,6 +485,12 @@ export const GraphEditor: React.FC<GraphEditorProps> = ({
             },
           })
           syncToGraph()
+        } else {
+          console.log('✗ Cannot create edge:', {
+            hasStartNode: startNode !== null,
+            hasEndNode: endNode !== null,
+            sameNode: startNode?.id() === endNode?.id()
+          })
         }
       }
     }
@@ -460,18 +545,26 @@ export const GraphEditor: React.FC<GraphEditorProps> = ({
         return
       }
       
-      setSelectedNode(node)
-      setSelectedEdge(null)
+      console.log('Node clicked:', node.id())
+      console.log('Setting selectedNodeId to:', node.id())
+      setSelectedNodeId(node.id())
+      setSelectedEdgeId(null)
     }
 
     const tapEdge = (e: cytoscape.EventObject) => {
-      setSelectedEdge(e.target as EdgeSingular)
-      setSelectedNode(null)
+      const edge = e.target as EdgeSingular
+      console.log('Edge clicked:', edge.id())
+      setSelectedEdgeId(edge.id())
+      setSelectedNodeId(null)
     }
 
-    const tapBlank = () => {
-      setSelectedNode(null)
-      setSelectedEdge(null)
+    const tapBlank = (e: cytoscape.EventObject) => {
+      // Only clear selection if we clicked the background (not a node or edge)
+      if (e.target === cy) {
+        console.log('Blank clicked - clearing selection')
+        setSelectedNodeId(null)
+        setSelectedEdgeId(null)
+      }
     }
 
     cy.on('tap', 'node', tapNode)
@@ -486,6 +579,15 @@ export const GraphEditor: React.FC<GraphEditorProps> = ({
   }, [drawMode, fromNode, syncToGraph])
 
   /* -------------------- Render -------------------- */
+  // Get fresh node/edge references from IDs
+  const selectedNode = selectedNodeId && cyRef.current ? cyRef.current.$id(selectedNodeId) : null
+  const selectedEdge = selectedEdgeId && cyRef.current ? cyRef.current.$id(selectedEdgeId) : null
+  
+  console.log('GraphEditor render - selectedNodeId:', selectedNodeId, 'selectedEdgeId:', selectedEdgeId)
+  console.log('selectedNode:', selectedNode?.id(), 'length:', selectedNode?.length, 'selectedEdge:', selectedEdge?.id(), 'length:', selectedEdge?.length)
+  console.log('Should show node panel:', !!(selectedNode && selectedNode.length > 0))
+  console.log('Should show edge panel:', !!(selectedEdge && selectedEdge.length > 0))
+  
   return (
     <div className={classes.container}>
       {/* -------------------- Item Properties Panel -------------------- */}
@@ -544,48 +646,101 @@ export const GraphEditor: React.FC<GraphEditorProps> = ({
           </div>
         )}
 
-        {selectedNode && (
-          <div className={classes.field}>
-            <label>Display Name</label>
-            <input
-              className={classes.inputField}
-              value={selectedNode.data('displayLabel') ?? ''}
-              onChange={(e) => { 
-                selectedNode.data('displayLabel', e.target.value); 
+        {/* Debug info */}
+        <div style={{ 
+          fontSize: '10px', 
+          color: '#999', 
+          padding: '4px',
+          backgroundColor: '#f0f0f0',
+          borderRadius: '2px',
+          marginTop: '8px'
+        }}>
+          Debug: nodeId={selectedNodeId || 'none'}, edgeId={selectedEdgeId || 'none'}<br/>
+          Node exists: {selectedNode ? 'yes' : 'no'}, Length: {selectedNode?.length || 0}
+        </div>
+
+        {selectedNode && selectedNode.length > 0 ? (
+          <>
+            <div style={{ 
+              padding: '8px', 
+              backgroundColor: '#e3f2fd', 
+              borderRadius: '4px',
+              marginBottom: '8px'
+            }}>
+              <strong>Selected Node: {selectedNode.id()}</strong>
+            </div>
+            <div className={classes.field}>
+              <label>Display Name</label>
+              <input
+                className={classes.inputField}
+                value={selectedNode.data('displayLabel') ?? ''}
+                onChange={(e) => { 
+                  selectedNode.data('displayLabel', e.target.value); 
+                  syncToGraph() 
+                }}
+              />
+            </div>
+            <button 
+              className={classes.deleteButton} 
+              onClick={() => { 
+                selectedNode.remove(); 
+                setSelectedNodeId(null); 
                 syncToGraph() 
               }}
-            />
+            >
+              🗑️ Delete Node
+            </button>
+          </>
+        ) : selectedNodeId ? (
+          <div style={{ padding: '8px', color: 'red' }}>
+            Node "{selectedNodeId}" not found in graph
+          </div>
+        ) : null}
+
+        {!selectedNodeId && !selectedEdgeId && (
+          <div style={{ 
+            fontSize: '12px', 
+            color: '#666', 
+            fontStyle: 'italic',
+            padding: '8px'
+          }}>
+            Click a node or edge to select it
           </div>
         )}
 
-        {selectedEdge && (
-          <div className={classes.field}>
-            <label>Edge Label</label>
-            <input
-              className={classes.inputField}
-              value={selectedEdge.data('label') ?? ''}
-              onChange={(e) => { 
-                selectedEdge.data('label', e.target.value); 
+        {selectedEdge && selectedEdge.length > 0 ? (
+          <>
+            <div style={{ 
+              padding: '8px', 
+              backgroundColor: '#e3f2fd', 
+              borderRadius: '4px',
+              marginBottom: '8px'
+            }}>
+              <strong>Selected Edge</strong>
+            </div>
+            <div className={classes.field}>
+              <label>Edge Label</label>
+              <input
+                className={classes.inputField}
+                value={selectedEdge.data('label') ?? ''}
+                onChange={(e) => { 
+                  selectedEdge.data('label', e.target.value); 
+                  syncToGraph() 
+                }}
+              />
+            </div>
+            <button 
+              className={classes.deleteButton} 
+              onClick={() => { 
+                selectedEdge.remove(); 
+                setSelectedEdgeId(null); 
                 syncToGraph() 
               }}
-            />
-          </div>
-        )}
-
-        {(selectedNode || selectedEdge) && (
-          <button 
-            className={classes.deleteButton} 
-            onClick={() => { 
-              selectedNode?.remove(); 
-              selectedEdge?.remove(); 
-              setSelectedNode(null); 
-              setSelectedEdge(null); 
-              syncToGraph() 
-            }}
-          >
-            Delete Selected
-          </button>
-        )}
+            >
+              🗑️ Delete Edge
+            </button>
+          </>
+        ) : null}
 
         {/* -------------------- Validation Feedback Panel -------------------- */}
         <div style={{ marginTop: '16px' }}>
