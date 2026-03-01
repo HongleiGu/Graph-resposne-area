@@ -1,5 +1,6 @@
 import { CodeResponseAreaTub } from './Code'
 import { EssayResponseAreaTub } from './Essay'
+import { GraphResponseAreaTub } from './Graph'
 import { ImagesResponseAreaTub } from './Images'
 import { LikertResponseAreaTub } from './Likert'
 import { MathMultiLinesResponseAreaTub } from './MathMultiLines'
@@ -28,11 +29,52 @@ export const supportedResponseTypes = [
   'ESSAY',
   'CODE',
   'MILKDOWN',
-  'LIKERT',
-  'MATH_SINGLE_LINE',
-  'MATH_MULTI_LINES',
-  'IMAGES',
+  'HANDDRAWNGRAPH'
 ]
+
+if (typeof window !== 'undefined') {
+  const TUBIFY_NAME = localStorage.getItem('tubify-name')
+  const TUBIFY_URL = localStorage.getItem('tubify-url')
+  if (TUBIFY_NAME && TUBIFY_URL) {
+    console.debug('ENABLING TUBIFY', {
+      name: TUBIFY_NAME,
+      url: TUBIFY_URL,
+    })
+    const loadComponent = async () => {
+      const response = await fetch(`${JSON.parse(TUBIFY_URL)}/tubify.iife.js`)
+      const componentCode = await response.text()
+
+      const script = document.createElement('script')
+      script.textContent = componentCode
+      document.head.appendChild(script)
+    }
+    loadComponent().then(() => {
+      supportedResponseTypes.push(TUBIFY_NAME)
+    })
+  }
+}
+
+class VoidResponseAreaTub extends ResponseAreaTub {
+  // public readonly responseType = 'VOID'
+  public readonly responseType = 'SANDBOX'
+
+  protected answerSchema = z.any()
+
+  toResponse = (): IModularResponseSchema => {
+    return {
+      responseType: '',
+      answer: null,
+    }
+  }
+
+  InputComponent = () => {
+    return null
+  }
+
+  WizardComponent = () => {
+    return null
+  }
+}
 
 const createReponseAreaTub = (type: string): ResponseAreaTub => {
   if (isResponseAreaSandboxType(type) && 'SandboxComponent' in window) {
@@ -58,6 +100,8 @@ const createReponseAreaTub = (type: string): ResponseAreaTub => {
       return new EssayResponseAreaTub()
     case 'CODE':
       return new CodeResponseAreaTub()
+    case 'HANDDRAWNGRAPH':
+      return new GraphResponseAreaTub()
     case 'LIKERT':
       return new LikertResponseAreaTub()
     case 'MATH_SINGLE_LINE':
