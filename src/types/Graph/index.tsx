@@ -277,16 +277,6 @@ const WizardPanel: React.FC<WizardPanelProps> = ({
           />
         </div>
       )}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <h3 style={{ margin: 0, fontWeight: 600, fontSize: 16 }}>Answer Graph</h3>
-        <GraphEditor
-          key="wizard-answer-editor"
-          graph={graph}
-          feedback={null}
-          phase={CheckPhase.Idle}
-          onChange={handleAnswerChange}
-        />
-      </div>
     </div>
   )
 }
