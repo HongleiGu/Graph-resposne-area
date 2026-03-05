@@ -8,9 +8,6 @@ export const NodeSchema = z.object({
   label: z.string().optional(),
   x: z.number().optional(),
   y: z.number().optional(),
-  partition: z.union([z.literal(0), z.literal(1)]).optional(),
-  color: z.number().optional(),
-  weight: z.number().optional(),
   metadata: z.record(z.any()).optional().default({}),
 });
 
@@ -23,11 +20,8 @@ export const EdgeSchema = z.object({
   source: z.string(),
   target: z.string(),
   weight: z.number().optional().default(1),
-  capacity: z.number().optional(),
-  flow: z.number().optional(),
   label: z.string().optional(),
   id: z.string().optional(),
-  color: z.string().optional(),
   metadata: z.record(z.any()).optional().default({}),
 });
 

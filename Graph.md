@@ -8,10 +8,10 @@ This module provides a visual editor for Graphs built with **Cytoscape.js** and 
 
 ### Frontend Schema (`Graph`)
 
-The full graph type used internally by the editor.
+The full graph type used internally by the editor. Defined as a Zod schema in `type.ts`.
 
 ```typescript
-export interface Graph {
+type Graph = {
   nodes: Array<{
     id: string;
     label?: string;
@@ -39,9 +39,9 @@ export interface Graph {
 To satisfy the `jsonNestedSchema` (2-level nesting limit, Shimmy communication issues), nodes and edges are serialised as pipe-delimited strings.
 
 ```typescript
-export interface SimpleGraph {
-  nodes: string[];   // Format: "id|label|x|y"
-  edges: string[];   // Format: "source|target|weight|label"
+type SimpleGraph = {
+  nodes: string[];        // Format: "id|label|x|y"
+  edges: string[];        // Format: "source|target|weight|label"
   directed: boolean;
   weighted: boolean;
   multigraph: boolean;
@@ -51,10 +51,10 @@ export interface SimpleGraph {
 
 ### Config Schema (`GraphConfig`)
 
-Teacher-configured parameters stored separately in `config`, **not** in the answer.
+Teacher-configured parameters stored separately in `config`, **not** in the answer. `evaluation_type` is a plain string (the backend Pydantic `EvaluationParams` expects a string, not an array).
 
 ```typescript
-export interface GraphConfig {
+type GraphConfig = {
   directed: boolean;
   weighted: boolean;
   multigraph: boolean;
@@ -64,18 +64,58 @@ export interface GraphConfig {
 
 ### Answer Schema (`GraphAnswer`)
 
-Topology-only answer — config flags are kept in `GraphConfig`, not here. Currently only used if `evaluation_type` is `isomorphim`.
+Topology-only answer — config flags live in `GraphConfig`, not here.
 
 ```typescript
-export interface GraphAnswer {
+type GraphAnswer = {
   nodes: string[];  // pipe-delimited node strings
   edges: string[];  // pipe-delimited edge strings
 }
 ```
 
+### Compressed Graph (`CompressedGraph`)
+
+An alternative serialisation where nodes and edges are JSON-stringified arrays stored as strings. Defined in `type.ts` alongside `compressGraph()`.
+
+### Validation & Feedback Types
+
+```typescript
+enum CheckPhase { Idle = 'idle', Evaluated = 'evaluated' }
+
+interface ValidationError {
+  type: 'error' | 'warning'
+  message: string
+  field?: string
+}
+
+interface GraphFeedback {
+  valid: boolean
+  errors: ValidationError[]
+  phase: CheckPhase
+}
+```
+
 ---
 
-## 2. Key Components
+## 2. File Structure
+
+```
+src/types/Graph/
+  Graph.component.tsx         # GraphEditor — Cytoscape + Paper.js visual editor
+  Graph.component.styles.ts   # makeStyles (emotion/tss-react) styles for GraphEditor
+  index.tsx                   # GraphResponseAreaTub, WizardPanel, InputComponent
+  type.ts                     # All Zod schemas, types, and conversion utilities
+  components/
+    ConfigPanel.tsx           # Teacher config UI (graph type, evaluation type)
+    ConfigPanel.styles.ts     # makeStyles styles for ConfigPanel
+    ItemPropertiesPanel.tsx   # Side panel: edit/delete selected node or edge
+```
+
+> **Note:** Styles use `makeStyles` from `@styles` (tss-react/emotion) rather than CSS modules. This is required because the project builds as an IIFE library — CSS modules are extracted into a separate file that may not be loaded by the consuming app, while emotion injects styles at runtime inside the JS bundle.
+
+---
+
+## 3. Key Components
 
 ### `Graph.component.tsx` — `GraphEditor`
 
@@ -86,51 +126,51 @@ The primary visual editor.
   - **Draw a circle** → creates a new node at the circle's centre.
   - **Draw a line between nodes** → creates a new edge between the two closest nodes.
   - **Click two nodes** (while in draw mode) → creates an edge between them.
-- **Selection**: Clicking a node or edge selects it, displaying its properties for editing in the side panel.
-- **Sync**: Every mutation (add/delete/edit) calls `syncToGraph()`, which reads the Cytoscape state and fires `onChange(graph)`.
+- **Selection**: Clicking a node or edge selects it; its properties appear in `ItemPropertiesPanel`.
+- **Sync**: Every mutation (add/delete/edit) calls `syncToGraph()`, which reads Cytoscape state and fires `onChange(graph)`.
 
 ### `components/ConfigPanel.tsx`
 
-Teacher-facing configuration panel.
+Teacher-facing configuration panel (rendered in `WizardComponent` only).
 
 - Toggle **Directed / Undirected**.
 - Select an **Evaluation Type** (e.g. `isomorphism`, `connectivity`, `tree`, ...).
-- For `isomorphism`, a second `GraphEditor` is rendered as the reference graph.
-
-### `components/GraphFeedbackPanel.tsx`
-
-`validateGraph()` makes some basic checks of graph for validation, however, this should be done by the backend. Even then, preview should be used from the back end for simple feedback, but not sure what good preview feedback there should be for Graph.
+- For `isomorphism`, a second `GraphEditor` is rendered below as the reference graph.
+- Styles are extracted to `ConfigPanel.styles.ts`.
 
 ### `components/ItemPropertiesPanel.tsx`
 
-Side panel for editing selected nodes/edges:
+Side panel rendered inside `GraphEditor` for editing selected elements:
 
-- Edit **Display Name** of a node.
-- Edit **Edge Label**.
-- **Delete** selected element.
-
----
-
-## 3. Transformation Logic
-
-Since the frontend editor and the backend see the data differently, conversion utilities are used at the network boundary.
-
-| Function | Source | Target | Location |
-|---|---|---|---|
-| `toSimpleGraph()` | `Graph` | `SimpleGraph` | `type.ts` |
-| `fromSimpleGraph()` | `SimpleGraph` | `Graph` | `type.ts` |
-| `graphAnswerToSimple()` | `GraphAnswer` + `GraphConfig` | `SimpleGraph` | `type.ts` |
-| `simpleToAnswer()` | `SimpleGraph` | `GraphAnswer` | `type.ts` |
-| `GraphConverter.toBackend()` | `SimpleGraph` | `BackendGraph` | `utils.ts` |
+- **Add Node** button.
+- **Fit to Screen** button.
+- **Draw Edge** toggle (activates draw mode).
+- Edit **Display Name** of a selected node.
+- Edit **Edge Label** of a selected edge.
+- **Delete Selected** button.
 
 ---
 
-## 4. Usage in the Pipeline
+## 4. Transformation Logic
 
-1. **Load**: Data is fetched from the backend as a flattened answer + config object.
+Conversion utilities in `type.ts` handle the boundary between the rich editor format and the flattened wire format.
+
+| Function | Source | Target |
+|---|---|---|
+| `toSimpleGraph(graph, evaluationType?)` | `Graph` | `SimpleGraph` |
+| `fromSimpleGraph(simple)` | `SimpleGraph` | `Graph` |
+| `graphAnswerToSimple(answer, config)` | `GraphAnswer` + `GraphConfig` | `SimpleGraph` |
+| `simpleToAnswer(simple)` | `SimpleGraph` | `GraphAnswer` |
+| `compressGraph(graph)` | `Graph` | `CompressedGraph` |
+
+---
+
+## 5. Usage in the Pipeline
+
+1. **Load**: Data arrives from the backend as a flattened answer object (nodes + edges + config flags merged together).
 2. **Convert**: `fromSimpleGraph(graphAnswerToSimple(answer, config))` reconstructs the rich `Graph` for the editor.
 3. **Edit**: The user interacts with `GraphEditor`. Internal state stays in the rich `Graph` format.
-4. **Save**: On change, `simpleToAnswer(toSimpleGraph(graph))` flattens the topology back. Config flags are merged directly into the answer object before sending to the backend:
+4. **Save**: On change, `simpleToAnswer(toSimpleGraph(graph))` flattens the topology back. Config flags are merged into the answer object before sending to the backend:
    ```typescript
    const flatAnswer = {
      ...answer,
@@ -141,20 +181,28 @@ Since the frontend editor and the backend see the data differently, conversion u
    }
    ```
 
+### Legacy migration
+
+`extractConfig` and `extractAnswer` in `GraphResponseAreaTub` handle two legacy cases:
+- `evaluation_type` stored as `string[]` (old format) — first element is taken.
+- Config flags flattened directly into the answer object (old format) — flags are read from there and a proper `GraphConfig` is reconstructed.
+
 ---
 
-## 5. Important Implementation Notes
+## 6. Important Implementation Notes
 
-- **Node IDs**: Nodes are auto-generated as `n0`, `n1`, `n2`, ... The counter tracks the highest existing ID to avoid duplicates on reload.
+- **Node IDs**: Auto-generated as `n0`, `n1`, `n2`, ... The counter tracks the highest existing ID to avoid duplicates on reload.
 - **Edge IDs**: Generated as `` `e-${source}-${target}-${Date.now()}` `` to guarantee uniqueness, including in multigraphs.
-- **Config is flattened into answer**: The backend reads `directed`, `weighted`, `multigraph`, and `evaluation_type` from the answer object, not from a separate config field. This is handled in `GraphResponseAreaTub.WizardComponent`.
+- **Config is flattened into answer**: The backend reads `directed`, `weighted`, `multigraph`, and `evaluation_type` from the answer object, not a separate config field. This is handled in `WizardPanel.onChange`.
+- **Stable sub-components**: `WizardPanel` is defined outside the `GraphResponseAreaTub` class to prevent React from treating it as a new component type on re-render, which would unmount/remount `GraphEditor` and destroy Cytoscape state.
 - **Cytoscape vs Paper.js layering**: Paper.js canvas sits on top of Cytoscape (`zIndex: 10`) with `pointerEvents: none` when not in draw mode, and `pointerEvents: auto` + `cursor: crosshair` when draw mode is active.
 - **Arrow direction**: The Cytoscape edge style `target-arrow-shape` is reactively updated whenever `graph.directed` changes.
-- **Isomorphism mode**: When `evaluation_type === 'isomorphism'`, the Wizard renders a second `GraphEditor` for the teacher to define the reference graph.
+- **Isomorphism mode**: When `evaluation_type === 'isomorphism'`, `WizardPanel` renders a second `GraphEditor` for the teacher to define the reference graph.
+- **Initial emit**: `WizardPanel` emits `onChange` on mount so config is always persisted to the DB even if the teacher never interacts with it.
 
 ---
 
-## 6. Supported Evaluation Types
+## 7. Supported Evaluation Types
 
 ```
 isomorphism, connectivity, bipartite, cycle_detection,
@@ -165,15 +213,13 @@ subgraph, hamiltonian_path, hamiltonian_cycle, clique_number
 
 ---
 
-## 7. Dev Notice
+## 8. Dev Notice
 
-There is a temporary folder `/dev` — all development work should be tested there.
-
-Run `yarn vite` or `yarn dev` to start.
+Run `yarn dev` to start (runs `build:watch` + `preview` in parallel).
 
 Note: for dev mode only, there is an extra config in `vite.config.ts`:
 
-```json
+```ts
 root: 'dev', // for dev only
 ```
 
