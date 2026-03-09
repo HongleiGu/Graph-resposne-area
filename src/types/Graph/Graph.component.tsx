@@ -5,6 +5,11 @@ import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { Graph, Node, Edge } from './type'
 import { useLocalStyles } from './Graph.component.styles'
 
+const CIRCLE_MIN_DIAMETER = 20
+const CIRCLE_MIN_STROKE_RATIO = 0.3   // min stroke length as a fraction of circumference
+const CIRCLE_MAX_DISTANCE_RATIO = 0.5 // max start-to-end gap as a fraction of diameter
+const NODE_SNAP_THRESHOLD = 75        // max pixel distance to snap a drawn line to a node
+
 /* ----------------------------- Graph Editor ----------------------------- */
 interface GraphEditorProps {
   graph: Graph
@@ -364,9 +369,9 @@ export const GraphEditor: React.FC<GraphEditorProps> = ({
     
     // Circle detection - relaxed criteria
     const circumference = Math.PI * diameter
-    const isCircle = diameter > 20 && 
-                    strokeLength > circumference * 0.3 && 
-                    distance < diameter * 0.5
+    const isCircle = diameter > CIRCLE_MIN_DIAMETER &&
+                    strokeLength > circumference * CIRCLE_MIN_STROKE_RATIO &&
+                    distance < diameter * CIRCLE_MAX_DISTANCE_RATIO
     
     if (isCircle) {
       // Add node at circle center
@@ -392,7 +397,7 @@ export const GraphEditor: React.FC<GraphEditorProps> = ({
             }
           })
 
-          return minDist < 75 ? closestNode : null // Increased threshold to 75
+          return minDist < NODE_SNAP_THRESHOLD ? closestNode : null
         }
         
         const startNode = findClosestNode(startPointRef.current.x, startPointRef.current.y)
