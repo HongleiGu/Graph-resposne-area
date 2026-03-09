@@ -336,7 +336,6 @@ export const GraphEditor: React.FC<GraphEditorProps> = ({
     const y = e.clientY - rect.top
     
     pathRef.current.add(new paper.Point(x, y))
-    // console.log(pathRef)
   }, [drawMode, isDrawing])
 
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -363,15 +362,6 @@ export const GraphEditor: React.FC<GraphEditorProps> = ({
     const strokeLength = pathRef.current.length
     const distance = startPointRef.current.getDistance(endPoint)
     
-    console.log('Drawing analysis:', {
-      diameter,
-      strokeLength,
-      distance,
-      startPoint: startPointRef.current,
-      endPoint,
-      bounds
-    })
-    
     // Circle detection - relaxed criteria
     const circumference = Math.PI * diameter
     const isCircle = diameter > 20 && 
@@ -379,11 +369,9 @@ export const GraphEditor: React.FC<GraphEditorProps> = ({
                     distance < diameter * 0.5
     
     if (isCircle) {
-      console.log('Detected circle, adding node at:', bounds.center)
       // Add node at circle center
       addNodeWithPos(bounds.center.x, bounds.center.y)
     } else {
-      console.log('Detected line, finding closest nodes')
       // Find closest nodes to start and end
       const cy = cyRef.current
       if (cy) {
@@ -398,33 +386,20 @@ export const GraphEditor: React.FC<GraphEditorProps> = ({
             // Use rendered position (viewport coordinates) instead of graph position
             const pos = node.renderedPosition()
             const dist = Math.hypot(pos.x - pointX, pos.y - pointY)
-            console.log(`  Node ${node.id()}: rendered pos (${pos.x}, ${pos.y}), dist: ${dist}`)
             if (dist < minDist) {
               minDist = dist
               closestNode = node
             }
           })
 
-          console.log(`  Closest node at distance ${minDist}, threshold: 75`)
           return minDist < 75 ? closestNode : null // Increased threshold to 75
         }
-        
-        console.log('Start point:', startPointRef.current.x, startPointRef.current.y)
-        console.log('End point:', endPoint.x, endPoint.y)
         
         const startNode = findClosestNode(startPointRef.current.x, startPointRef.current.y)
         const endNode   = findClosestNode(endPoint.x, endPoint.y)
 
-        console.log('Found nodes:', {
-          startNode: startNode?.id(),
-          startDist: startNode ? Math.hypot(startNode.position().x - startPointRef.current.x, startNode.position().y - startPointRef.current.y) : 'N/A',
-          endNode: endNode?.id(),
-          endDist: endNode ? Math.hypot(endNode.position().x - endPoint.x, endNode.position().y - endPoint.y) : 'N/A',
-          totalNodes: cy.nodes().length
-        })
 
         if (startNode !== null && endNode !== null && startNode.id() !== endNode.id()) {
-          console.log('✓ Adding edge between:', startNode.id(), endNode.id())
           cy.add({
             group: 'edges',
             data: {
@@ -435,12 +410,6 @@ export const GraphEditor: React.FC<GraphEditorProps> = ({
             },
           })
           syncToGraph()
-        } else {
-          console.log('✗ Cannot create edge:', {
-            hasStartNode: startNode !== null,
-            hasEndNode: endNode !== null,
-            sameNode: startNode?.id() === endNode?.id()
-          })
         }
       }
     }

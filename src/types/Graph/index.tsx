@@ -175,7 +175,6 @@ export class GraphResponseAreaTub extends ResponseAreaTub {
             multigraph: config.multigraph,
             evaluation_type: config.evaluation_type,
           }
-          console.log('[GraphTub] sending to backend:', flatAnswer)
           props.handleChange({
             responseType: this.responseType,
             answer: flatAnswer,
